@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'provider.dart';
+import 'package:provider/provider.dart';
 import 'dart:math';
 
 void main() {

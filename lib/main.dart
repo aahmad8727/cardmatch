@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'provider.dart';
+import 'package:provider/provider.dart';
 
+/// MAIN ENTRY POINT
 void main() {
   runApp(
     ChangeNotifierProvider(
@@ -12,6 +13,7 @@ void main() {
   );
 }
 
+/// ROOT APP
 class CardMatchingApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -19,7 +21,7 @@ class CardMatchingApp extends StatelessWidget {
   }
 }
 
-/// Data model for each card.
+/// MODEL FOR EACH CARD
 class GameCard {
   final int id;
   final String content;
@@ -34,13 +36,12 @@ class GameCard {
   });
 }
 
-/// Provider to manage game state, timer, score, and game logic.
 class GameProvider extends ChangeNotifier {
   List<GameCard> _cards = [];
   GameCard? _firstSelected;
   bool _waiting = false;
 
-  // Timer and scoring system.
+  // Timer and scoring
   DateTime? _startTime;
   Timer? _timer;
   int _elapsedSeconds = 0;
@@ -51,13 +52,14 @@ class GameProvider extends ChangeNotifier {
     _initializeCards();
   }
 
+  // Getters
   List<GameCard> get cards => _cards;
   int get elapsedSeconds => _elapsedSeconds;
   int get score => _score;
   bool get gameFinished => _gameFinished;
 
-  /// Initializes card pairs and shuffles them.
   void _initializeCards() {
+    print("Initializing cards...");
     List<String> contents = List.generate(8, (index) => (index + 1).toString());
     List<GameCard> tempCards = [];
     int id = 0;
@@ -68,7 +70,7 @@ class GameProvider extends ChangeNotifier {
     tempCards.shuffle(Random());
     _cards = tempCards;
 
-    // Reset game variables.
+    // Reset state
     _firstSelected = null;
     _waiting = false;
     _elapsedSeconds = 0;
@@ -80,46 +82,61 @@ class GameProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Starts the game timer.
+  /// START THE TIMER WHEN THE FIRST CARD IS FLIPPED
   void _startTimer() {
+    print("Starting timer...");
     _startTime = DateTime.now();
-    _timer = Timer.periodic(Duration(seconds: 1), (timer) {
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       _elapsedSeconds++;
+      // Debug print for timer
+      print("Timer tick: $_elapsedSeconds");
       notifyListeners();
     });
   }
 
-  /// Stops the game timer.
+  /// STOP THE TIMER (CALLED WHEN THE GAME IS WON)
   void _stopTimer() {
+    print("Stopping timer...");
     _timer?.cancel();
   }
 
-  /// Resets the game.
+  /// RESET THE GAME (SHUFFLE CARDS, RESET SCORE/TIMER)
   void resetGame() {
+    print("Resetting game...");
     _initializeCards();
   }
 
-  /// Called when a card is tapped.
+  /// FLIP A CARD WHEN TAPPED
   void flipCard(GameCard card) {
-    // Do nothing if waiting
-    if (_waiting || card.isFaceUp || card.isMatched) return;
+    // If we are waiting for a mismatch animation, or the card is already face-up, do nothing
+    if (_waiting || card.isFaceUp || card.isMatched) {
+      print(
+        "flipCard: Doing nothing because waiting: $_waiting, isFaceUp: ${card.isFaceUp}, isMatched: ${card.isMatched}",
+      );
+      return;
+    }
 
-    // Start timer when first card is flipped.
+    // Start timer if it's the first move
     if (_startTime == null) {
       _startTimer();
     }
 
+    print("Flipping card id: ${card.id}, content: ${card.content}");
     card.isFaceUp = true;
     notifyListeners();
 
+    // If this is the first selected card, just store it
     if (_firstSelected == null) {
+      print("First card selected: id: ${card.id}, content: ${card.content}");
       _firstSelected = card;
     } else {
-      // Two cards are flipped
+      // We have two flipped cards now
       _waiting = true;
+      print("Second card selected: id: ${card.id}, content: ${card.content}");
       // Check for match
       if (_firstSelected!.content == card.content) {
-        //mark both as matched.
+        // It's a match
+        print("Cards match! Awarding +10 points.");
         card.isMatched = true;
         _firstSelected!.isMatched = true;
         _score += 10; // Award points
@@ -128,9 +145,12 @@ class GameProvider extends ChangeNotifier {
         notifyListeners();
         _checkWinCondition();
       } else {
-        _score = max(_score - 5, 0);
-        // After a delay, flip both cards back.
-        Timer(Duration(seconds: 1), () {
+        // Not a match
+        print("Cards do not match! Deducting 5 points.");
+        _score = max(_score - 5, 0); // Deduct points
+        // Flip back after a short delay
+        Timer(const Duration(seconds: 1), () {
+          print("Flipping cards back...");
           card.isFaceUp = false;
           _firstSelected!.isFaceUp = false;
           _firstSelected = null;
@@ -141,9 +161,11 @@ class GameProvider extends ChangeNotifier {
     }
   }
 
-  /// Checks if all cards have been matched.
   void _checkWinCondition() {
-    if (_cards.every((card) => card.isMatched)) {
+    final allMatched = _cards.every((card) => card.isMatched);
+    print("Checking win condition: allMatched=$allMatched");
+    if (allMatched) {
+      print("All cards matched, stopping timer, setting gameFinished=true");
       _stopTimer();
       _gameFinished = true;
       notifyListeners();
@@ -151,36 +173,16 @@ class GameProvider extends ChangeNotifier {
   }
 }
 
-/// Displaying timer, score, and grid of cards
+/// MAIN GAME SCREEN
 class GameScreen extends StatelessWidget {
-  void _showWinDialog(BuildContext context, int elapsedSeconds, int score) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder:
-          (_) => AlertDialog(
-            title: Text("You Win!"),
-            content: Text("Time: ${elapsedSeconds}s\nScore: $score"),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  Provider.of<GameProvider>(context, listen: false).resetGame();
-                },
-                child: Text("Play Again"),
-              ),
-            ],
-          ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Consumer<GameProvider>(
       builder: (context, gameProvider, child) {
-        // Show win dialog if game finished.
+        // If game finished, show win dialog
         if (gameProvider.gameFinished) {
-          Future.delayed(Duration(milliseconds: 300), () {
+          // Delay a bit to allow flip animation to complete
+          Future.delayed(const Duration(milliseconds: 300), () {
             _showWinDialog(
               context,
               gameProvider.elapsedSeconds,
@@ -191,20 +193,23 @@ class GameScreen extends StatelessWidget {
 
         return Scaffold(
           appBar: AppBar(
-            title: Text('Card Matching Game'),
+            title: const Text('Card Matching Game'),
             actions: [
+              // Timer display
               Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16.0),
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
                 child: Center(
                   child: Text("Time: ${gameProvider.elapsedSeconds}s"),
                 ),
               ),
+              // Score display
               Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16.0),
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
                 child: Center(child: Text("Score: ${gameProvider.score}")),
               ),
+              // Restart button
               IconButton(
-                icon: Icon(Icons.refresh),
+                icon: const Icon(Icons.refresh),
                 onPressed: () {
                   gameProvider.resetGame();
                 },
@@ -212,11 +217,11 @@ class GameScreen extends StatelessWidget {
             ],
           ),
           body: Padding(
-            padding: EdgeInsets.all(16.0),
+            padding: const EdgeInsets.all(16.0),
             child: GridView.builder(
               itemCount: gameProvider.cards.length,
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 4, // 4 columns for a 4x4 grid.
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 4, // 4 columns
                 crossAxisSpacing: 8.0,
                 mainAxisSpacing: 8.0,
               ),
@@ -230,12 +235,33 @@ class GameScreen extends StatelessWidget {
       },
     );
   }
+
+  void _showWinDialog(BuildContext context, int elapsedSeconds, int score) {
+    print("Showing win dialog: time=$elapsedSeconds, score=$score");
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder:
+          (_) => AlertDialog(
+            title: const Text("You Win!"),
+            content: Text("Time: ${elapsedSeconds}s\nScore: $score"),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  Provider.of<GameProvider>(context, listen: false).resetGame();
+                },
+                child: const Text("Play Again"),
+              ),
+            ],
+          ),
+    );
+  }
 }
 
-/// Widget representing an individual card with a flip animation.
 class CardWidget extends StatefulWidget {
   final GameCard card;
-  CardWidget({required this.card});
+  const CardWidget({Key? key, required this.card}) : super(key: key);
 
   @override
   _CardWidgetState createState() => _CardWidgetState();
@@ -249,12 +275,13 @@ class _CardWidgetState extends State<CardWidget>
   @override
   void initState() {
     super.initState();
+    // Setup animation controller
     _controller = AnimationController(
       vsync: this,
-      duration: Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 300),
     );
     _flipAnimation = Tween<double>(begin: 0, end: 1).animate(_controller);
-    // If the card is already face up at the start, show it.
+
     if (widget.card.isFaceUp) {
       _controller.forward();
     }
@@ -263,7 +290,6 @@ class _CardWidgetState extends State<CardWidget>
   @override
   void didUpdateWidget(covariant CardWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Animate when card face state changes.
     if (widget.card.isFaceUp != oldWidget.card.isFaceUp) {
       if (widget.card.isFaceUp) {
         _controller.forward();
@@ -283,6 +309,9 @@ class _CardWidgetState extends State<CardWidget>
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () {
+        print(
+          "Card tapped: id=${widget.card.id}, faceUp=${widget.card.isFaceUp}",
+        );
         Provider.of<GameProvider>(context, listen: false).flipCard(widget.card);
       },
       child: AnimatedBuilder(
@@ -306,7 +335,7 @@ class _CardWidgetState extends State<CardWidget>
                     isFront
                         ? Text(
                           widget.card.content,
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 24,
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
